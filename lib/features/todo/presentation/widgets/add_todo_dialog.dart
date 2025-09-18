@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class AddTodoDialog extends StatefulWidget {
   final Function(String title, String? description) onAdd;
@@ -104,13 +106,6 @@ class _AddTodoDialogState extends State<AddTodoDialog> {
   }
 }
 
-
-
-import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:test_app/tide_interview/presentation/bloc/parking_cubit.dart';
-import 'package:test_app/tide_interview/presentation/bloc/parking_state.dart';
-
 void main() {
   runApp(MyApp());
 }
@@ -149,8 +144,7 @@ class ParkingScreen extends StatelessWidget {
                 return ListTile(
                   key: ValueKey(slot.id),
                   title: Text(slot.name),
-                  onTap: () =>
-                      context.read<ParkingCubit>().park(slot.id),
+                  onTap: () => context.read<ParkingCubit>().park(slot.id),
                 );
               },
             );

@@ -4,44 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:collection';
-
-/// ---------- Connectivity Service ----------
-class ConnectivityService {
-  final _connectivity = Connectivity();
-  final _controller = StreamController<bool>.broadcast();
-  StreamSubscription? _subscription;
-
-  Stream<bool> get onConnectivityChanged => _controller.stream;
-
-  ConnectivityService() {
-    _subscription =
-        _connectivity.onConnectivityChanged.listen(_updateConnectionStatus);
-    // Check initial state
-    _checkConnectivity();
-  }
-
-  Future<void> _checkConnectivity() async {
-    final result = await _connectivity.checkConnectivity();
-    _updateConnectionStatus(result);
-  }
-
-  void _updateConnectionStatus(ConnectivityResult result) {
-    _controller.add(result != ConnectivityResult.none);
-  }
-
-  Future<bool> isConnected() async {
-    final result = await _connectivity.checkConnectivity();
-    return result != ConnectivityResult.none;
-  }
-
-  void dispose() {
-    _subscription?.cancel();
-    _controller.close();
-  }
-}
-
 // offline 1st TODO,2 device -> offline -> persist, online -> sync, merge, conflict resolution,
 //online:- immediately sync, offline: queue changes, on reconnect: flush queue
 
@@ -181,33 +144,18 @@ class EventManager {
 /// and relays events between devices.
 class MockWebSocket {
   final EventManager manager;
-  final ConnectivityService _connectivityService;
   bool online = true;
   Duration latency;
-  StreamSubscription? _connectivitySubscription;
 
   MockWebSocket({
     required this.manager,
     this.latency = const Duration(milliseconds: 600),
-  }) : _connectivityService = ConnectivityService() {
-    _initConnectivity();
-  }
-
-  void _initConnectivity() {
-    _connectivitySubscription =
-        _connectivityService.onConnectivityChanged.listen((isConnected) {
-      online = isConnected;
-    });
-    // Check initial connectivity
-    _connectivityService.isConnected().then((isConnected) {
-      online = isConnected;
-    });
-  }
+  });
 
   // Subscribe for incoming events (device will filter by itself)
   StreamSubscription subscribe(void Function(String) onData) {
-    return manager.stream.listen((payload) async {
-      if (!online) return;
+    return manager.stream.listen((payload) {
+      if (!online) return; // simulate network down
       // simulate latency
       Future.delayed(latency, () => onData(payload));
     });
@@ -218,11 +166,6 @@ class MockWebSocket {
     if (!online) return;
     await Future.delayed(latency);
     manager.publishJson(payload);
-  }
-
-  void dispose() {
-    _connectivitySubscription?.cancel();
-    _connectivityService.dispose();
   }
 }
 
@@ -558,8 +501,16 @@ class _DevicePanelState extends State<DevicePanel> {
   void dispose() {
     _newController.dispose();
     widget.syncEngine.dispose();
-    (widget.socket as MockWebSocket).dispose();
     super.dispose();
+  }
+
+  void _toggleNetwork(bool value) {
+    setState(() {
+      widget.socket.online = value;
+      if (value) {
+        widget.syncEngine.onNetworkRestored();
+      }
+    });
   }
 
   Future<void> _createTodo() async {
@@ -620,25 +571,7 @@ class _DevicePanelState extends State<DevicePanel> {
                 ),
                 const SizedBox(width: 12),
                 const Text('Network:'),
-                StreamBuilder<bool>(
-                  stream: (widget.socket as MockWebSocket)
-                      ._connectivityService
-                      .onConnectivityChanged,
-                  initialData: widget.socket.online,
-                  builder: (context, snapshot) {
-                    return Row(
-                      children: [
-                        Icon(
-                          snapshot.data == true ? Icons.wifi : Icons.wifi_off,
-                          color:
-                              snapshot.data == true ? Colors.green : Colors.red,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(snapshot.data == true ? 'Online' : 'Offline'),
-                      ],
-                    );
-                  },
-                ),
+                Switch(value: widget.socket.online, onChanged: _toggleNetwork),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () async {
